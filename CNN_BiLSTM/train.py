@@ -7,7 +7,7 @@ from torchmetrics.image import StructuralSimilarityIndexMeasure
 from data_reader import *
 from tqdm import tqdm
 from model import LSTMCNN
-from evaluate_model import *
+from CNN_BiLSTM.utils.evaluate_model import *
 
 
 def get_args():

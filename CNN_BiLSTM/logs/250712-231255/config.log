@@ -1,0 +1,14 @@
+data_path: ../data/train/rad_clean_merged.1.npy
+noise_data_path: ../data/train/data_noise_30002048_N.npy
+train_ratio: 0.8
+batch_size: 32
+input_size: 1
+hidden_size: 64
+num_layers: 2
+output_size: 1
+dropout_rate: 0.1
+learning_rate: 0.001
+num_epochs: 30
+scheduler_factor: 0.5
+scheduler_patience: 3
+device: cuda
