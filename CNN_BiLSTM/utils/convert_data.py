@@ -1,6 +1,5 @@
 import numpy as np
 
-
 def reshape_data(input_file):
     data = np.loadtxt(input_file)
     reshaped_data = data.reshape(500, 2048)
