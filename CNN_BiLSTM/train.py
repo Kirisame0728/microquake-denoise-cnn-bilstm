@@ -107,7 +107,7 @@ def set_config(args):
     return config
 
 
-def train(args):
+def train(args, model):
     current_time = time.strftime("%y%m%d-%H%M%S")
     log_dir = os.path.join(args.log_dir, current_time)
     logging.info("Training log: {}".format(log_dir))
@@ -127,7 +127,7 @@ def train(args):
         fp.write('\n'.join("%s: %s" % item for item in vars(config).items()))
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = LSTMCNN(config).to(device)
+    model = model.to(device)
     ssim_loss = StructuralSimilarityIndexMeasure(data_range=2.0).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=config.learning_rate)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer,
@@ -219,4 +219,4 @@ def train(args):
 
 
 if __name__ == '__main__':
-    train(get_args())
+    train(get_args(), LSTMCNN(set_config(get_args())))
