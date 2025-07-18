@@ -1,5 +1,4 @@
 from matplotlib import pyplot as plt
-import numpy as np
 
 def plot_figure(time, noisy_signal, clean_signal, name):
     fig, axes = plt.subplots(2, 1, sharex=True)
