@@ -9,10 +9,9 @@ import torch
 from tqdm import tqdm
 
 from model import LSTMCNN
-from data_reader import get_full_signal_loader  # assuming this is your CSV loader
+from data_reader import get_full_signal_loader
 
-from utils.plot_result import plot_figure      # your provided plotting function
-
+from utils.plot_result import plot_figure
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Batch prediction for seismic denoising model")
@@ -37,10 +36,8 @@ def parse_args():
 
 
 def predict(args, device):
-    # inject device into args for model init
     args.device = device
 
-    # prepare output dirs
     now = time.strftime("%y%m%d-%H%M%S")
     base_out = os.path.join(args.output_dir, f"pred_{now}")
     os.makedirs(base_out, exist_ok=True)
@@ -50,20 +47,17 @@ def predict(args, device):
     if fig_dir:
         os.makedirs(fig_dir, exist_ok=True)
 
-    # load model
     model = LSTMCNN(args)
     state = torch.load(args.model_path, map_location=device)
     model.load_state_dict(state)
     model.eval()
     logging.info(f"Loaded model from {args.model_path}")
 
-    # data loader
     loader = get_full_signal_loader(args.csv_list,
                                     batch_size=args.batch_size,
                                     shuffle=False,
                                     dataset_path="../data/test/")
 
-    # loop
     for signals, paths in tqdm(loader, desc="Predicting"):
         for sig_tensor, path in zip(signals, paths):
             length = sig_tensor.size(0)
@@ -85,13 +79,11 @@ def predict(args, device):
             # reconstruct
             denoised = np.concatenate(denoised_chunks, axis=0)  # (length,)
 
-            # file naming & saving
             fname = os.path.splitext(os.path.basename(path))[0]
             if args.save_signal:
                 den_path = os.path.join(res_dir, fname + "_denoised.txt")
                 np.savetxt(den_path, denoised, fmt="%.6f")
 
-            # plot
             if args.plot_figure:
                 raw = sig_tensor.squeeze(-1).cpu().numpy()
                 t = np.arange(length) / args.sampling_rate
