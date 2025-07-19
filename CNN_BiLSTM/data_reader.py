@@ -1,6 +1,9 @@
 import numpy as np
 import torch
 from torch.utils.data import Dataset, DataLoader
+import math
+import pandas as pd
+import os
 
 
 class Config:
@@ -21,9 +24,29 @@ class Config:
     scheduler_patience = 3
 
 
+
 def normalize_amplitude(signals: np.ndarray) -> np.ndarray:
-    max_vals = np.max(np.abs(signals), axis=1, keepdims=True)
-    return signals / max_vals
+    arr = np.asarray(signals)
+    abs_arr = np.abs(arr)
+
+    if arr.ndim == 1:
+        max_val = abs_arr.max()
+        if max_val == 0:
+            return arr
+        return arr / max_val
+
+    elif arr.ndim == 2:
+        max_vals = abs_arr.max(axis=1, keepdims=True)
+        max_vals[max_vals == 0] = 1.0
+        return arr / max_vals
+
+
+
+def load_text_data(file_path):
+    with open(file_path, "r") as file:
+        data = file.readlines()
+    data = [float(line.strip()) for line in data]
+    return np.array(data)
 
 
 class SignalNoiseDataset(Dataset):
@@ -99,3 +122,59 @@ def get_dataloaders(clean_path: str,
     )
 
     return train_loader, val_loader
+
+
+class CSVFullSignalDataset(Dataset):
+    """
+    根据 CSV 的 file_path 列，逐条加载、归一化原始一维信号（不切分），
+    返回：
+      signal_tensor: torch.Tensor, shape (L, 1)
+      file_path:      str
+    """
+    def __init__(self, csv_path: str, dataset_path: str):
+        super().__init__()
+        df = pd.read_csv(csv_path)
+        self.names = df['file_name'].tolist()
+        self.dataset_path = dataset_path
+
+    def __len__(self):
+        return len(self.names)
+
+    def __getitem__(self, idx):
+        name = self.names[idx]
+        fp = os.path.join(self.dataset_path, name)
+        sig = load_text_data(fp)
+        sig = normalize_amplitude(sig)
+        t = torch.tensor(sig, dtype=torch.float32)
+        t = t.unsqueeze(-1)
+        return t, name
+
+def get_full_signal_loader(csv_path: str,
+                           dataset_path: str,
+                           batch_size: int = 1,
+                           shuffle: bool = False,
+                           num_workers: int = 0,
+                           pin_memory: bool = True):
+    """
+    返回 DataLoader，每次迭代得到：
+      signals: list of torch.Tensor, 每个 (L_i,1)
+      paths:   list of str, 对应的 file_path
+    之后在预测里，再按 chunk_size 切分：
+      for sig, fp in zip(signals, paths):
+          # sig.shape = (L,1)
+          # 按 chunk_size pad/slice -> model 预测 -> 拼接
+    """
+    ds = CSVFullSignalDataset(csv_path, dataset_path)
+    loader = DataLoader(
+        ds,
+        batch_size=batch_size,
+        shuffle=shuffle,
+        num_workers=num_workers,
+        pin_memory=pin_memory,
+        collate_fn=lambda batch: (
+            [item[0] for item in batch],
+            [item[1] for item in batch]
+        ),
+        persistent_workers=(num_workers > 0)
+    )
+    return loader
