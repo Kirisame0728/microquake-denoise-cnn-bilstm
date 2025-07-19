@@ -65,19 +65,19 @@ def predict(args, device):
 
             # chunk & infer
             for i in range(0, length, args.chunk_size):
-                chunk = sig_tensor[i:i + args.chunk_size]     # (≤chunk_size,1)
+                chunk = sig_tensor[i:i + args.chunk_size]
                 if chunk.size(0) < args.chunk_size:
                     pad = args.chunk_size - chunk.size(0)
                     chunk = torch.nn.functional.pad(chunk, (0, 0, 0, pad))
-                inp = chunk.unsqueeze(0).to(device)           # (1,chunk_size,1)
+                inp = chunk.unsqueeze(0).to(device)
                 with torch.no_grad():
-                    out = model(inp)                          # (1,chunk_size,1)
-                out = out.squeeze(0).squeeze(-1).cpu().numpy()  # (chunk_size,)
+                    out = model(inp)
+                out = out.squeeze(0).squeeze(-1).cpu().numpy()
                 valid_len = min(chunk.size(0), length - i)
                 denoised_chunks.append(out[:valid_len])
 
             # reconstruct
-            denoised = np.concatenate(denoised_chunks, axis=0)  # (length,)
+            denoised = np.concatenate(denoised_chunks, axis=0)
 
             fname = os.path.splitext(os.path.basename(path))[0]
             if args.save_signal:
