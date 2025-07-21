@@ -125,12 +125,6 @@ def get_dataloaders(clean_path: str,
 
 
 class CSVFullSignalDataset(Dataset):
-    """
-    根据 CSV 的 file_path 列，逐条加载、归一化原始一维信号（不切分），
-    返回：
-      signal_tensor: torch.Tensor, shape (L, 1)
-      file_path:      str
-    """
     def __init__(self, csv_path: str, dataset_path: str):
         super().__init__()
         df = pd.read_csv(csv_path)
@@ -155,15 +149,7 @@ def get_full_signal_loader(csv_path: str,
                            shuffle: bool = False,
                            num_workers: int = 0,
                            pin_memory: bool = True):
-    """
-    返回 DataLoader，每次迭代得到：
-      signals: list of torch.Tensor, 每个 (L_i,1)
-      paths:   list of str, 对应的 file_path
-    之后在预测里，再按 chunk_size 切分：
-      for sig, fp in zip(signals, paths):
-          # sig.shape = (L,1)
-          # 按 chunk_size pad/slice -> model 预测 -> 拼接
-    """
+
     ds = CSVFullSignalDataset(csv_path, dataset_path)
     loader = DataLoader(
         ds,
