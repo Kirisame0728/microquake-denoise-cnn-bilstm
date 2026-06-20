@@ -1,77 +1,87 @@
+from __future__ import annotations
+
 import torch
 import torch.nn as nn
 
 
-# class ModelConfig:
-#
-#     def __init__(self,
-#                  input_size: int = 1,
-#                  hidden_size: int = 64,
-#                  num_layers: int = 2,
-#                  output_size: int = 1,
-#                  dropout_rate: float = 0.1):
-#         self.input_size   = input_size
-#         self.hidden_size  = hidden_size
-#         self.num_layers   = num_layers
-#         self.output_size  = output_size
-#         self.dropout_rate = dropout_rate
+def build_cnn_channels(
+    num_layers: int,
+    base_channels: int = 32,
+    max_channels: int = 512,
+) -> list[int]:
+    channels: list[int] = []
+    current = base_channels
+    for _ in range(num_layers):
+        channels.append(min(current, max_channels))
+        current = min(current * 2, max_channels)
+    return channels
 
 
 class LSTMCNN(nn.Module):
     def __init__(self, cfg):
-        super(LSTMCNN, self).__init__()
-        # Copy model structure params from cfg
-        self.input_size   = cfg.input_size
-        self.hidden_size  = cfg.hidden_size
-        self.num_layers   = cfg.num_layers
-        self.output_size  = cfg.output_size
+        super().__init__()
+        self.input_size = cfg.input_size
+        self.hidden_size = cfg.hidden_size
+        self.num_layers = cfg.num_layers
+        self.output_size = cfg.output_size
         self.dropout_rate = cfg.dropout_rate
-
-        # CNN backbone
-        self.cnn = nn.Sequential(
-            nn.Conv1d(self.input_size, 32, kernel_size=3, padding=1),
-            nn.BatchNorm1d(32),
-            nn.ReLU(),
-            nn.Conv1d(32, 64, kernel_size=3, padding=1),
-            nn.BatchNorm1d(64),
-            nn.ReLU(),
-            nn.Conv1d(64, 128, kernel_size=3, padding=1),
-            nn.BatchNorm1d(128),
-            nn.ReLU(),
-            nn.Conv1d(128, 256, kernel_size=3, padding=1),
-            nn.BatchNorm1d(256),
-            nn.ReLU(),
-            nn.Conv1d(256, 512, kernel_size=3, padding=1),
-            nn.BatchNorm1d(512),
-            nn.ReLU()
+        self.num_cnn_layers = getattr(cfg, "num_cnn_layers", 5)
+        self.base_channels = getattr(cfg, "base_channels", 32)
+        self.max_channels = getattr(cfg, "max_channels", 512)
+        self.cnn_channels = build_cnn_channels(
+            num_layers=self.num_cnn_layers,
+            base_channels=self.base_channels,
+            max_channels=self.max_channels,
         )
 
-        # Bidirectional LSTM
+        self.cnn = self._build_cnn_backbone(self.input_size, self.cnn_channels)
         self.lstm = nn.LSTM(
-            input_size=512,
+            input_size=self.cnn_channels[-1],
             hidden_size=self.hidden_size,
             num_layers=self.num_layers,
             batch_first=True,
             bidirectional=True,
-            dropout=self.dropout_rate if self.num_layers > 1 else 0.0
+            dropout=self.dropout_rate if self.num_layers > 1 else 0.0,
+        )
+        self.fc = nn.Linear(self.hidden_size * 2, self.output_size)
+
+    @staticmethod
+    def _build_cnn_backbone(input_channels: int, cnn_channels: list[int]) -> nn.Sequential:
+        layers: list[nn.Module] = []
+        in_channels = input_channels
+        for out_channels in cnn_channels:
+            layers.extend(
+                (
+                    nn.Conv1d(in_channels, out_channels, kernel_size=3, padding=1),
+                    nn.BatchNorm1d(out_channels),
+                    nn.ReLU(),
+                )
+            )
+            in_channels = out_channels
+        return nn.Sequential(*layers)
+
+    def _reshape_input(self, x: torch.Tensor) -> torch.Tensor:
+        if x.dim() == 4:
+            batch_size = x.size(0)
+            return x.reshape(batch_size, -1, self.input_size)
+        if x.dim() == 3:
+            return x
+        if x.dim() == 2:
+            return x.unsqueeze(-1)
+        raise ValueError(
+            "Expected model input with 2, 3, or 4 dimensions, "
+            f"but received shape {tuple(x.shape)}"
         )
 
-        # Final fully‐connected layer
-        self.fc = nn.Linear(self.hidden_size * 2, self.output_size)
-        self.to(cfg.device)
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self._reshape_input(x)
+        batch_size = x.size(0)
 
-    def forward(self, x):
-        # x: [B, 1, H, W] → reshape to [B, L, 1]
-        B = x.size(0)
-        x = x.view(B, -1, 1)           # [B, L, 1]
-        x = x.permute(0, 2, 1)         # [B, 1, L]
-        x = self.cnn(x)                # [B, 512, L]
-        x = x.permute(0, 2, 1)         # [B, L, 512]
+        x = x.permute(0, 2, 1)
+        x = self.cnn(x)
+        x = x.permute(0, 2, 1)
 
-        # init LSTM states on the same device
-        h0 = torch.zeros(self.num_layers * 2, B, self.hidden_size, device=x.device)
-        c0 = torch.zeros(self.num_layers * 2, B, self.hidden_size, device=x.device)
-        out, _ = self.lstm(x, (h0, c0))  # [B, L, hidden_size*2]
-
-        out = self.fc(out)              # [B, L, output_size]
-        return out
+        h0 = torch.zeros(self.num_layers * 2, batch_size, self.hidden_size, device=x.device)
+        c0 = torch.zeros(self.num_layers * 2, batch_size, self.hidden_size, device=x.device)
+        out, _ = self.lstm(x, (h0, c0))
+        return self.fc(out)

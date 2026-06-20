@@ -18,5 +18,5 @@ def plot_figure(time, noisy_signal, clean_signal, name):
     fig.text(0.06, 0.5, 'Amplitude', ha='center', va='center', rotation='vertical', fontsize=12)
 
     fig.savefig(name, dpi=300, bbox_inches='tight')
-    plt.show()
+    plt.close(fig)
 
